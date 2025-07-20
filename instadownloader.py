@@ -98,11 +98,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # دانلود عکس پروفایل
         if query.data == "download_profile":
-            username = url.split("instagram.com/")[1].strip("/").split("/")[0]
-            profile = instaloader.Profile.from_username(L.context, username)
-            photo_url = profile.profile_pic_url
-            await query.message.reply_photo(photo_url, caption=f"عکس پروفایل @{username}")
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    html = response.text
+                    match = re.search(r'"profile_pic_url_hd":"([^"]+)"', html)
+                    if match:
+                        profile_pic_url = match.group(1).replace("\\u0026", "&").replace("\\", "")
+                        await query.message.reply_photo(profile_pic_url, caption="👤 عکس پروفایل:")
+                    else:
+                        await query.message.reply_text("نتونستم عکس پروفایل رو پیدا کنم 😕")
+                else:
+                    await query.message.reply_text("خطا در دریافت اطلاعات صفحه ❌")
+            except Exception as e:
+                await query.message.reply_text(f"خطا هنگام دریافت عکس پروفایل:\n{e}")
             return
+
 
         # سایر حالت‌ها برای پست/ریل
         shortcode = url.split("/")[-2]
