@@ -4,38 +4,53 @@ import instaloader
 import os
 import uuid
 import shutil
-
-import os
-
-TOKEN = os.getenv("BOT_TOKEN")
-
 import requests
 import re
 
-def extract_video_url(instagram_url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0'
-    }
-
-    try:
-        response = requests.get(instagram_url, headers=headers)
-        if response.status_code == 200:
-            html = response.text
-            video_url_match = re.search(r'"video_url":"([^"]+)"', html)
-            if video_url_match:
-                video_url = video_url_match.group(1).replace('\\u0026', '&').replace('\\', '')
-                return video_url
-    except Exception as e:
-        print("Error extracting video:", e)
-
-    return None
-
+TOKEN = os.getenv("BOT_TOKEN")
 
 # شی اصلی instaloader
 L = instaloader.Instaloader()
 
 # ذخیره لینک هر کاربر
 user_links = {}
+
+def extract_video_url(instagram_url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0'
+    }
+    try:
+        response = requests.get(instagram_url, headers=headers)
+        if response.status_code == 200:
+            html = response.text
+            video_url_match = re.search(r'"video_url":"([^\"]+)"', html)
+            if video_url_match:
+                video_url = video_url_match.group(1).replace('\\u0026', '&').replace('\\', '')
+                return video_url
+    except Exception as e:
+        print("Error extracting video from HTML:", e)
+    return None
+
+def extract_video_url_api(shortcode):
+    try:
+        variables = {"shortcode": shortcode}
+        doc_id = "8845758582119845"
+        params = {
+            "variables": str(variables).replace("'", '"'),
+            "doc_id": doc_id,
+            "server_timestamps": "true"
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+        }
+        response = requests.get("https://www.instagram.com/graphql/query", params=params, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            video_url = data["data"]["shortcode_media"]["video_url"]
+            return video_url
+    except Exception as e:
+        print("Error extracting video via API:", e)
+    return None
 
 # شروع ربات
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -98,7 +113,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         files = sorted(os.listdir(temp_dir))
 
-        # گزینه‌ها:
         if query.data == "download_cover":
             for f in files:
                 if f.endswith(".jpg"):
@@ -107,7 +121,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         break
 
         elif query.data == "download_video":
+            # اول از html امتحان می‌کنیم
             video_url = extract_video_url(url)
+
+            # اگه جواب نداد از API استفاده کن
+            if not video_url:
+                video_url = extract_video_url_api(shortcode)
+
             if video_url:
                 video_data = requests.get(video_url, stream=True)
                 if video_data.status_code == 200:
@@ -119,9 +139,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     with open(video_path, "rb") as f:
                         await query.message.reply_video(f, caption="🎞️ ویدیوی ریلز:")
-                        sent = True
                 else:
-                    await query.edit_message_text("نتونستم ویدیو رو دانلود کنم ❌")
+                    await query.edit_message_text("دانلود ویدیو ناموفق بود ❌")
             else:
                 await query.edit_message_text("ویدیو پیدا نشد 😢")
 
